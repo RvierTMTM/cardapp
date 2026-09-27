@@ -1,2 +1,59 @@
-{"name":"카드관리","short_name":"카드관리","start_url":"./","scope":"./","display":"standalone","background_color":"#1f3a5f","theme_color":"#1f3a5f","lang":"ko",
-"icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},{"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}
+{
+ "name": "카드관리",
+ "short_name": "카드관리",
+ "start_url": "./",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#1f3a5f",
+ "theme_color": "#1f3a5f",
+ "lang": "ko",
+ "icons": [
+  {
+   "src": "icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any maskable"
+  },
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any maskable"
+  }
+ ],
+ "shortcuts": [
+  {
+   "name": "결제추천",
+   "short_name": "결제추천",
+   "url": "./?p=p2",
+   "icons": [
+    {
+     "src": "icon-192.png",
+     "sizes": "192x192"
+    }
+   ]
+  },
+  {
+   "name": "동기화",
+   "short_name": "동기화",
+   "url": "./?p=p4",
+   "icons": [
+    {
+     "src": "icon-192.png",
+     "sizes": "192x192"
+    }
+   ]
+  },
+  {
+   "name": "조회",
+   "short_name": "조회",
+   "url": "./?p=p5",
+   "icons": [
+    {
+     "src": "icon-192.png",
+     "sizes": "192x192"
+    }
+   ]
+  }
+ ]
+}
