@@ -197,7 +197,7 @@ nav button{font-size:13px}
 "use strict";
 /* ================= 데이터 (카드사 공식 페이지 2026-09-25 조사, 리버 확인) ================= */
 const DATA={
-ver:"260928-v05",
+ver:"260927-v06",
 cards:[
  {id:"sh",name:"신한 The BEST-F",short:"신한",color:"var(--c-sh)",pay:"The BEST-F 스카이패스",th:[300000],unlock:13900,
   unlockNote:"스벅 3,900 + 백화점·마트 5% 한도 1만",hal:"count",pay_day:15},
@@ -807,7 +807,7 @@ function doRec(){
     h+=`<div class="box ${isB?"best":""}"><div class="row"><span class="nm"><span class="dot" style="background:${x.c.color}"></span>${isB?"추천 · ":""}${x.c.name}</span><span class="amt nm">${won(x.tot)}</span></div>
     <div class="muted">이번 결제 혜택 ${won(x.now)}${x.unlock?` + 다음달 열림 ${won(x.unlock)}`:""}</div>
     ${x.bs.filter(o=>o.v>0||o.off||o.note||o.unk).map(o=>`<div class="tx">· ${esc(o.b.t)} ${o.off?`<span class="tag w">전월실적 미달</span>`:`<b>${won(o.v)}</b>`}${o.note?` <span class="muted">${esc(o.note)}</span>`:""}${o.unk?` <span class="tag w">미확인</span>`:""}${o.pn?` <span class="tag w">전월실적 미확인</span>`:""}<div class="muted">어디서: ${esc(o.b.w)}</div></div>`).join("")}
-    <div class="muted" style="margin-top:4px">${esc(x.why)}</div></div>`;
+    <div class="row" style="margin-top:4px;flex-wrap:nowrap"><span class="muted">${esc(x.why)}</span><button class="sm" data-paid="${x.c.id}" style="white-space:nowrap">이 카드로 결제함</button></div></div>`;
   });
   if(evs.length)h+=`<div class="box"><h3>이벤트</h3>${evs.map(e=>`<div class="li">${esc(e.t)} <span class="tag w">${esc(e.how)}</span></div>`).join("")}</div>`;
   if(!best.length)h=`<div class="box muted">이 업종은 ${activeCards().length}장 모두 혜택 0원이에요. 실적 채울 카드로 쓰세요.</div>`+h;
@@ -882,11 +882,15 @@ function renderP4(){
 function applyTx(tx,name){
   /* 파일이 담은 날짜 범위만 교체 (파일명 YYYY-MM-DD~YYYY-MM-DD 우선, 없으면 거래 최소~최대일) */
   const fm=String(name||"").match(/(\d{4}-\d\d-\d\d)\s*[~_]\s*(\d{4}-\d\d-\d\d)/);
-  let lo,hi;if(fm){lo=fm[1];hi=fm[2];}else if(tx.length){lo=tx.reduce((a,t)=>t.d<a?t.d:a,tx[0].d);hi=tx.reduce((a,t)=>t.d>a?t.d:a,tx[0].d);}
-  if(!tx.length&&!fm)return toast("반영할 거래가 없어요");
+  /* 교체 범위: 시작 = 파일명 시작일(없으면 거래 최소일), 끝 = 파일 안 마지막 거래일 → 예전 파일을 늦게 넣어도 그 뒤 거래는 안 지워짐 */
+  if(!tx.length)return toast("반영할 거래가 없어요");
+  const minD=tx.reduce((a,t)=>t.d<a?t.d:a,tx[0].d),maxD=tx.reduce((a,t)=>t.d>a?t.d:a,tx[0].d);
+  const lo=fm&&fm[1]<minD?fm[1]:minD,hi=maxD;
   S.tx=S.tx.filter(t=>t.d<lo||t.d>hi).concat(tx).sort((a,b)=>(b.d+b.tm).localeCompare(a.d+a.tm));
+  /* 엑셀이 정본: 이 기간의 수동 입력은 정리 */
+  const mb=S.man.length;S.man=S.man.filter(t=>t.d<lo||t.d>hi);const mr=mb-S.man.length;
   const ms=new Set(tx.map(t=>ym(t.d)));
-  S.file=name;S.syncAt=today()+" "+new Date().toTimeString().slice(0,5);save();renderAll();toast(`${tx.length}건 반영 (${[...ms].sort().map(mlabel).join(",")})`);}
+  S.file=name;S.syncAt=today()+" "+new Date().toTimeString().slice(0,5);save();renderAll();toast(`${tx.length}건 반영 (${[...ms].sort().map(mlabel).join(",")})${mr?` · 수동입력 ${mr}건 정리`:""}`);}
 let gTok=null,gExp=0;
 function loadGis(){return new Promise((res,rej)=>{if(window.google&&google.accounts&&google.accounts.oauth2)return res();
   const sc=document.createElement("script");sc.src="https://accounts.google.com/gsi/client";sc.onload=res;sc.onerror=()=>rej(new Error("인터넷 연결 필요"));document.head.appendChild(sc);});}
@@ -908,9 +912,10 @@ async function driveSync(){
     const fl=await gget(`${A}?q=${q}&orderBy=modifiedTime desc&pageSize=5&fields=files(id,name,modifiedTime)`,tok);
     if(!fl.files.length)throw new Error("폴더에 xlsx가 없어요");
     const f=fl.files[0];
+    if(S.set.dLastId===f.id&&S.set.dLastMod===f.modifiedTime){toast("이미 반영된 파일이에요 ("+f.name+") — 새 엑셀을 올린 뒤 다시 눌러요");return;}
     const buf=await gget(`${A}/${f.id}?alt=media`,tok,true);
     S.dfile=f.name+" ("+f.modifiedTime.slice(0,10)+")";
-    applyTx(await parseXlsx(buf),f.name);
+    applyTx(await parseXlsx(buf),f.name);S.set.dLastId=f.id;S.set.dLastMod=f.modifiedTime;save();
     if(window.driveBackup)driveBackup(false);
   }catch(err){toast("실패: "+err.message);}
 }
@@ -923,6 +928,8 @@ document.addEventListener("click",async e=>{
   if(d.cat){selCat=d.cat;show("p2");setTimeout(()=>$("#amt")&&$("#amt").focus(),50);return;}
   if(d.cat2){selCat=d.cat2;window._amt=$("#amt").value;renderP2();return;}
   if(b.id==="go")return doRec();
+  if(d.paid){const amt=Number(window._amt)||0;if(!amt)return toast("금액이 없어요");const nm=(window._msel||window._mq||"").trim()||((DATA.cats.find(c=>c.id===selCat)||{}).l||"결제");
+    S.man.push({d:today(),tm:new Date().toTimeString().slice(0,8),big:"",sub:"",c:nm,a:amt,card:d.paid,man:1});save();renderAll();toast(`${cardBy(d.paid).short} ${won(amt)} 기록 — 실적에 바로 반영`);return;}
   if(d.mer){selCat=d.mer;window._mq=d.mn;window._msel=d.mn;renderP2();setTimeout(()=>{$("#amt").focus()},30);toast(d.mn+" → "+(DATA.cats.find(c=>c.id===d.mer)||{}).l);return;}
   if(b.id==="dsync"||b.id==="dsync2")return driveSync();
   if(b.id==="gsave"){S.set.gcid=$("#gcid").value.trim();S.set.dfolder=$("#dfolder").value.trim()||"카드관리";delete S.set.dFolderId;save();toast("저장");return;}
@@ -1220,7 +1227,7 @@ const qShort=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n-1)+"…":s;};
 function renderQuery(el){
   const t0=performance.now();
   QEL=el;if(!S.memo)S.memo={};
-  if(!QF.from&&!QF.to)qSetPreset(QF.pre);
+  if((!QF.from&&!QF.to)||(QF.pre&&QF.pre!=="custom"))qSetPreset(QF.pre);
   const L=queryTx(QF);QRES=L;
   /* 한 번 순회로 합계·가맹점·분류·경로 집계 */
   let sum=0;const mer=new Map(),bigM=new Map(),payM=new Map();
@@ -1732,6 +1739,8 @@ function renderAnnual() {
       <div class="mgbar"><i style="width:${pct}%;background:${c.color}"></i></div>
       <div class="row muted" style="margin-top:4px"><span>${man(cum)} / ${man(d.need)}</span><span>${done ? `다음해 ${won(d.bonus)} 옵션 확정` : `남음 ${man(rest)} · 월 ${man(perMo)} 필요`}</span></div>
       <div class="muted" style="margin-top:2px">${esc(d.note)}</div>
+      ${(()=>{const py=String(Number(cur.slice(0,4))-1);let s=0,has=false;for(let i=1;i<=12;i++){const m=py+"-"+String(i).padStart(2,"0");if(!hasMonth(m))continue;has=true;s+=monthStat(m)[d.id].ok;}
+        return has?`<div class="muted" style="margin-top:2px">작년(${py}) 결과: ${man(s)} → ${s>=d.need?"달성":"미달"}${s>=d.need?"":` (${man(d.need-s)} 부족)`}</div>`:"";})()}
     </div>`;
   }
   return h + `</div>`;
