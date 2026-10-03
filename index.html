@@ -175,6 +175,13 @@ nav button.on{color:var(--acc);font-weight:700;box-shadow:inset 0 3px 0 var(--ac
 .mdet{margin:6px 0 4px 44px;font-size:13px}
 .gc-pick{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto;gap:6px;scrollbar-width:none}.gc-pick::-webkit-scrollbar{display:none}.gc-pick button{flex:none;margin:0}
 nav button{font-size:13px}
+
+/* 취소 상계 쌍: 왼쪽 회색 띠로 묶고, 원거래는 취소 바로 아래에 붙임 */
+.tag.cx{color:var(--sub);border-color:var(--sub);background:transparent}
+.li.cxp{border-left:3px solid var(--sub);padding-left:8px;opacity:.75}
+.li.cxp .amt{text-decoration:line-through}
+.li.cxp.cxo{margin-top:-6px;border-top:1px dashed var(--line)}
+.cxw{font-size:12px;color:var(--sub)}
 </style>
 </head>
 <body>
@@ -197,7 +204,7 @@ nav button{font-size:13px}
 "use strict";
 /* ================= 데이터 (카드사 공식 페이지 2026-09-25 조사, 리버 확인) ================= */
 const DATA={
-ver:"261003-v08",
+ver:"261003-v09",
 cards:[
  {id:"sh",name:"신한 The BEST-F",short:"신한",color:"var(--c-sh)",pay:"The BEST-F 스카이패스",th:[300000],unlock:13900,
   unlockNote:"스벅 3,900 + 백화점·마트 5% 한도 1만",hal:"count",pay_day:15},
@@ -581,15 +588,20 @@ function pairCancels(list){
   for(const arr of g.values()){if(arr.length<2)continue;
     for(const p of arr){if(p.a>=0||p.cx)continue;const pd=Date.parse(p.d);
       let m=null,best=1e18;for(const t of arr){if(t.cx||t===p||t.a!==-p.a)continue;const dd=pd-Date.parse(t.d);if(dd>=-5*86400000&&dd<=45*86400000&&Math.abs(dd)<best){best=Math.abs(dd);m=t;}}
-      if(m){p.cx=true;m.cx=true;}}}
+      if(m){p.cx=true;m.cx=true;p.cxr="취소";m.cxr="원거래";p.pid=m.pid=txKey(m);p.pt={d:m.d,a:m.a};m.pt={d:p.d,a:p.a};}}}
   return L;
 }
 /* 메모리 색인: 월별 묶음 + 월별 집계 캐시 (데이터가 늘어도 화면은 해당 월만 계산) */
 let IDX=null;const MS=new Map();
 function rebuild(){const L=pairCancels(S.tx.concat(S.man));const bm=new Map();
-  for(const t of L){if(t.cx)continue;const m=t.d.slice(0,7);let a=bm.get(m);if(!a)bm.set(m,a=[]);a.push(t);}
-  IDX={all:L,bm};MS.clear();LOD.clear();}
+  const cm=new Map();for(const t of L){const m=t.d.slice(0,7);if(t.cx){let c=cm.get(m);if(!c)cm.set(m,c=[]);c.push(t);continue;}let a=bm.get(m);if(!a)bm.set(m,a=[]);a.push(t);}
+  IDX={all:L,bm,cm};MS.clear();LOD.clear();}
 function monthTx(m){if(!IDX)rebuild();return IDX.bm.get(m)||[];}
+function cxTx(m){if(!IDX)rebuild();return IDX.cm.get(m)||[];}  /* 그 달의 취소 상계 쌍(실적·합계에서 빠짐, 목록 표시용) */
+/* 목록 정렬: 최신순이되 취소 쌍은 붙여서(취소 바로 아래 원거래) */
+function pairSort(list){const at=new Map();for(const t of list){const k=t.pid?t.pid:txKey(t),v=t.d+t.tm;if(!at.has(k)||v>at.get(k))at.set(k,v);}
+  return list.slice().sort((a,b)=>{const ka=a.pid||txKey(a),kb=b.pid||txKey(b),x=at.get(kb).localeCompare(at.get(ka));if(x)return x;if(ka!==kb)return kb.localeCompare(ka);return (a.cxr==="취소"?0:1)-(b.cxr==="취소"?0:1);});}
+function md(d){return d.slice(5).replace("-",".");}
 /* ===== 실적 규칙 v07: 카드사 공식 상품 페이지 기준 (2026-10-03 리버 확인) =====
    PERF_EXCL = 전월실적 제외 항목 / EARN_EXCL = 적립·캐시백 제외 항목 — 두 목록은 다르다. 혼용 금지 */
 const TXK={ /* 거래 판별기: 뱅샐 소분류(sub)·가맹점(c) 기준 */
@@ -649,7 +661,14 @@ function loDiscounts(m){
     const d=Math.min(v,rem);rem-=d;res.used+=d;res.map.set(txKey(t),d);}
   return res;
 }
+/* 취소 딱지: 상계 쌍은 실적 0, 짝 없는 환불은 계산은 그대로(인정 등에서 차감)하고 표시만 '취소' */
 function classify(t){
+  if(t.cx)return t.cxr==="취소"?{s:"취소",why:`↔ ${md(t.pt.d)} 결제와 상계 · 실적 0`}:{s:"취소",why:`↔ ${md(t.pt.d)} 취소와 상계 · 실적 0`};
+  const r=classify0(t);
+  if(t.a<0&&r.why!=="직접 지정"&&r.why!=="가맹점 지정")return {s:"취소",why:"환불 — 짝 원거래 못 찾음 · "+(r.s==="인정"?"인정":r.s)+" 실적에서 차감",base:r.s};
+  return r;
+}
+function classify0(t){
   const k=txKey(t);
   if(S.ov[k])return {s:S.ov[k],why:"직접 지정"};
   const mk=t.card+"|"+t.c;if(S.ovm&&S.ovm[mk])return {s:S.ovm[mk],why:"가맹점 지정"};
@@ -669,7 +688,7 @@ function monthStat(m){
   const ck_=m+"|"+today();if(MS.has(ck_))return MS.get(ck_);
   const res={};for(const c of DATA.cards)res[c.id]={ok:0,ck:0,no:0,pl:0,plAll:0,use:0,fp:0,fq:0,hal:0,items:[],plItems:[]};
   const L=monthTx(m);
-  for(const t of L){const r=res[t.card];if(!r)continue;const cl=classify(t),b=counts(cl.s,t.card);r[b]+=t.a;r.use+=t.a;if(cl.s==="할부")r.hal+=t.a;if(cl.why==="정기결제")r.fp+=t.a;r.items.push(Object.assign({},t,{st:cl.s,why:cl.why,b}));}
+  for(const t of L){const r=res[t.card];if(!r)continue;const cl=classify(t),b=counts(cl.base||cl.s,t.card);r[b]+=t.a;r.use+=t.a;if(cl.s==="할부")r.hal+=t.a;if(cl.why==="정기결제")r.fp+=t.a;r.items.push(Object.assign({},t,{st:cl.s,why:cl.why,b}));}
   if(m===CUR()){
     for(const rc of S.rec){if(rc.until&&m>rc.until)continue;
       const hit=L.some(t=>t.card===rc.card&&t.c.includes(rc.k));
@@ -1259,13 +1278,13 @@ const qMer=c=>{if(typeof window.normMerchant==="function"){try{const r=window.no
 const qPay=c=>c.includes("네이버")?"naver":c.includes("쿠팡")?"coupang":c.includes("카카오")?"kakao":"etc";
 
 /* 조건에 맞는 유효 거래(cx 제외) — 한 번 순회 */
-function queryTx(Q){
+function queryTx(Q,withCx){
   Q=Q||QF;if(!Q.from&&!Q.to)qSetPreset(Q.pre||"m3");
   const from=Q.from||"0000",to=Q.to||"9999",cards=Q.cards&&Q.cards.length?new Set(Q.cards):null;
   const q=qNorm(Q.text),big=Q.big||"",min=Q.min===""||Q.min==null?null:+Q.min,max=Q.max===""||Q.max==null?null:+Q.max,st=Q.st||"";
   const memo=S.memo||{},out=[];
   for(const t of allTx()){
-    if(t.cx)continue;
+    if(t.cx&&!withCx)continue;
     if(t.d<from||t.d>to)continue;
     if(cards&&!cards.has(t.card))continue;
     if(big&&t.big!==big)continue;
@@ -1307,7 +1326,7 @@ function renderQuery(el){
     <div class="q-two" style="margin-top:6px"><input data-qf="text" placeholder="가맹점·메모 검색" value="${esc(QF.text)}" autocomplete="off"><button class="sm" data-qa="apply">검색</button></div>
     <div class="q-two" style="margin-top:6px"><select data-qf="big"><option value="">분류 전체</option>${qBigs().map(b=>`<option ${QF.big===b?"selected":""}>${esc(b)}</option>`).join("")}</select>
     <input data-qf="min" inputmode="numeric" placeholder="최소 금액" value="${esc(QF.min)}"><input data-qf="max" inputmode="numeric" placeholder="최대 금액" value="${esc(QF.max)}"></div>
-    <div class="chips q-chips" style="margin-top:6px"><span class="muted" style="margin-right:4px">실적</span>${[["","전체"],["인정","인정"],["할부","할부"],["제외","제외"],["확인","확인"]].map(([v,l])=>`<button class="sm ${QF.st===v?"sel":""}" data-qa="st" data-qv="${v}">${l}</button>`).join("")}
+    <div class="chips q-chips" style="margin-top:6px"><span class="muted" style="margin-right:4px">실적</span>${[["","전체"],["인정","인정"],["할부","할부"],["제외","제외"],["확인","확인"],["취소","취소"]].map(([v,l])=>`<button class="sm ${QF.st===v?"sel":""}" data-qa="st" data-qv="${v}">${l}</button>`).join("")}
     <button class="sm" data-qa="reset" style="margin-left:auto">초기화</button></div>`;
   }
   h+=`</div>`;
@@ -1329,12 +1348,13 @@ function renderQuery(el){
   let ch="";if(typeof window.renderCharts==="function"){try{ch=window.renderCharts(L,QF)||"";}catch(e){ch=`<div class="box muted">차트 오류: ${esc(e.message)}</div>`;}}
   h+=`<div id="qCharts">${ch}</div>`;
   /* ---- 건별 목록 ---- */
-  const list=QF.sort==="amt"?L.slice().sort((a,b)=>b.a-a.a):L.slice().sort((a,b)=>(b.d+b.tm).localeCompare(a.d+a.tm));
+  const LL=queryTx(QF,true),ncx=LL.length-L.length;
+  const list=QF.sort==="amt"?LL.slice().sort((a,b)=>b.a-a.a):pairSort(LL);
   const n=Math.min(QF.limit,list.length);
-  h+=`<div class="box"><div class="row"><h3>거래 ${list.length.toLocaleString("ko-KR")}건 <span class="muted">— 탭하면 메모</span></h3><span><button class="sm ${QF.sort==="date"?"sel":""}" data-qa="sort" data-qv="date">최신순</button><button class="sm ${QF.sort==="amt"?"sel":""}" data-qa="sort" data-qv="amt">금액순</button></span></div>`;
+  h+=`<div class="box"><div class="row"><h3>거래 ${L.length.toLocaleString("ko-KR")}건${ncx?` <span class="muted">+ 취소 상계 ${ncx}건</span>`:""} <span class="muted">— 탭하면 메모</span></h3><span><button class="sm ${QF.sort==="date"?"sel":""}" data-qa="sort" data-qv="date">최신순</button><button class="sm ${QF.sort==="amt"?"sel":""}" data-qa="sort" data-qv="amt">금액순</button></span></div>`;
   for(let i=0;i<n;i++){const t=list[i],c=cardBy(t.card),k=txKey(t),m=memo[k],cl=classify(t);
-    h+=`<div class="li tx q-row" data-qa="row" data-qv="${i}"><div class="row"><span class="c"><span class="q-d">${t.d.slice(2).replace(/-/g,".")}</span> <b style="color:${c.color}">${t.card==="etc"&&window.etcLabel?esc(etcLabel(t)):c.short}</b> ${esc(t.c)}</span><span class="amt ${t.a<0?"q-neg":""}">${won(t.a)}</span></div>
-    <div class="row muted"><span class="c">${esc(t.big)}${t.sub?" · "+esc(t.sub):""}${cl.s!=="인정"?` <span class="tag ${cl.s==="확인"?"w":""}">${cl.s}</span>`:""}</span>${m?`<span class="q-memo">📝 ${esc(m)}</span>`:""}</div>
+    h+=`<div class="li tx q-row${t.cx?" cxp"+(t.cxr==="원거래"?" cxo":""):""}" data-qa="row" data-qv="${i}"><div class="row"><span class="c"><span class="q-d">${t.d.slice(2).replace(/-/g,".")}</span> <b style="color:${c.color}">${t.card==="etc"&&window.etcLabel?esc(etcLabel(t)):c.short}</b> ${esc(t.c)}</span><span class="amt ${t.a<0?"q-neg":""}">${won(t.a)}</span></div>
+    <div class="row muted"><span class="c">${esc(t.big)}${t.sub?" · "+esc(t.sub):""}${cl.s!=="인정"?` <span class="tag ${cl.s==="확인"?"w":cl.s==="취소"?"cx":""}">${cl.s}</span>`:""}${cl.s==="취소"?` <span class="cxw">${esc(cl.why)}</span>`:""}</span>${m?`<span class="q-memo">📝 ${esc(m)}</span>`:""}</div>
     ${QOPEN===i?`<div class="q-two q-edit"><input data-qmi="${i}" value="${esc(m||"")}" placeholder="메모" autocomplete="off"><button class="sm pri" data-qa="memo" data-qv="${i}">저장</button>${m?`<button class="sm" data-qa="memodel" data-qv="${i}">지움</button>`:""}</div>`:""}</div>`;}
   if(n<list.length)h+=`<button data-qa="more" style="width:100%;margin-top:8px">더보기 (${(list.length-n).toLocaleString("ko-KR")}건 남음)</button>`;
   h+=`</div>`;
@@ -1571,20 +1591,18 @@ function renderCharts(txs, Q) {
 /* 공개: 그 달·그 카드 건별 목록(날짜·가맹점·금액·classify 표시) + 합계 */
 function renderMonthDetail(m, cardId) {
   const meta = chCardMeta(cardId);
-  const list = monthTx(m)
-    .filter((t) => t.card === cardId)
-    .slice()
-    .sort((a, b) => (b.d + b.tm).localeCompare(a.d + a.tm));
-  let h = `<div class="box gc-md"><div class="row"><h3>${chMoLabel(m)} <b style="color:${meta.color}">${esc(meta.short)}</b></h3><span class="muted">${list.length.toLocaleString("ko-KR")}건</span></div>`;
+  const list = pairSort(monthTx(m).concat(cxTx(m)).filter((t) => t.card === cardId));
+  const ncx = list.filter((t) => t.cx).length;
+  let h = `<div class="box gc-md"><div class="row"><h3>${chMoLabel(m)} <b style="color:${meta.color}">${esc(meta.short)}</b></h3><span class="muted">${(list.length - ncx).toLocaleString("ko-KR")}건${ncx ? ` + 취소 상계 ${ncx}건` : ""}</span></div>`;
   if (!list.length) return h + `<div class="muted" style="font-size:12.5px">이 달·이 카드 거래가 없어요.</div></div>`;
   let sum = 0;
   for (const t of list) {
     sum += t.a;
     const cl = classify(t);
-    const tagCls = cl.s === "인정" ? "tag g" : cl.s === "확인" ? "tag w" : "tag";
+    const tagCls = cl.s === "인정" ? "tag g" : cl.s === "확인" ? "tag w" : cl.s === "취소" ? "tag cx" : "tag";
     const tagStyle = cl.s === "제외" ? ' style="color:var(--bad);border-color:var(--bad)"' : "";
-    h += `<div class="li"><div class="row"><span class="c">${esc(t.d.slice(5).replace("-", "."))} ${esc(t.c)}</span><span class="amt ${t.a < 0 ? "gc-neg" : ""}">${won(t.a)}</span></div>
-    <div class="row muted"><span class="c">${esc(t.big)}${t.sub ? " · " + esc(t.sub) : ""}</span><span class="${tagCls}"${tagStyle}>${esc(cl.s)}</span></div></div>`;
+    h += `<div class="li${t.cx ? " cxp" + (t.cxr === "원거래" ? " cxo" : "") : ""}"><div class="row"><span class="c">${esc(t.d.slice(5).replace("-", "."))} ${esc(t.c)}</span><span class="amt ${t.a < 0 ? "gc-neg" : ""}">${won(t.a)}</span></div>
+    <div class="row muted"><span class="c">${cl.s === "취소" ? `<span class="cxw">${esc(cl.why)}</span>` : esc(t.big) + (t.sub ? " · " + esc(t.sub) : "")}</span><span class="${tagCls}"${tagStyle}>${esc(cl.s)}</span></div></div>`;
   }
   h += `<div class="row" style="margin-top:8px;font-weight:700"><span>합계</span><span>${won(sum)}</span></div></div>`;
   return h;
