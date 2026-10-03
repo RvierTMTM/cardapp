@@ -197,12 +197,12 @@ nav button{font-size:13px}
 "use strict";
 /* ================= 데이터 (카드사 공식 페이지 2026-09-25 조사, 리버 확인) ================= */
 const DATA={
-ver:"260927-v06",
+ver:"261003-v08",
 cards:[
  {id:"sh",name:"신한 The BEST-F",short:"신한",color:"var(--c-sh)",pay:"The BEST-F 스카이패스",th:[300000],unlock:13900,
   unlockNote:"스벅 3,900 + 백화점·마트 5% 한도 1만",hal:"count",pay_day:15},
  {id:"ha",name:"하나 JADE Classic",short:"하나",color:"var(--c-ha)",pay:"JADE Classic",th:[500000],unlock:20000,
-  unlockNote:"스벅 5천 + 택시 5천 + 스트리밍 1만 (특별적립 별도)",hal:"exclude",pay_day:13},
+  unlockNote:"스벅 5천 + 택시 5천 + 스트리밍 1만 (특별적립 별도)",hal:"count",pay_day:13},
  {id:"lo",name:"롯데 올마이드라이빙",short:"롯데",color:"var(--c-lo)",pay:"롯데 패밀리 W 올마이드라이빙 카드",th:[300000],unlock:15000,
   unlockNote:"통합한도 = 전월 이용액 5% (30만 기준 1.5만)",hal:"count",pay_day:14},
  {id:"ss",name:"삼성 AI 구독",short:"삼성",color:"var(--c-ss)",pay:"삼성전자 AI 구독 삼성카드",th:[300000,700000,1200000],unlock:13000,
@@ -493,7 +493,7 @@ function findMerch(q){q=q.trim().toLowerCase().replace(/\s+/g,"");if(!q)return [
 const LS="cardapp.v1";
 let S={tx:[],ov:{},used:{},man:[],rec:null,preset:[],set:{fuelPrice:1700,mileWon:15,unlock:{}},prevOk:{},syncAt:null,file:null};
 function load(){try{const j=JSON.parse(localStorage.getItem(LS)||"null");if(j)S=Object.assign(S,j);}catch(e){}if(!S.rec)S.rec=JSON.parse(JSON.stringify(DATA.rec));}
-function save(){IDX=null;MS.clear();try{localStorage.setItem(LS,JSON.stringify(S));}catch(e){toast("저장 실패: "+e.message);}}
+function save(){IDX=null;MS.clear();LOD.clear();try{localStorage.setItem(LS,JSON.stringify(S));}catch(e){toast("저장 실패: "+e.message);}}
 load();
 
 /* ================= 유틸 ================= */
@@ -580,7 +580,7 @@ function pairCancels(list){
   for(const t of L){const k=t.card+"|"+t.c+"|"+Math.abs(t.a);let a=g.get(k);if(!a)g.set(k,a=[]);a.push(t);}
   for(const arr of g.values()){if(arr.length<2)continue;
     for(const p of arr){if(p.a>=0||p.cx)continue;const pd=Date.parse(p.d);
-      const m=arr.find(t=>!t.cx&&t!==p&&t.a===-p.a&&Math.abs(Date.parse(t.d)-pd)<=5*86400000);
+      let m=null,best=1e18;for(const t of arr){if(t.cx||t===p||t.a!==-p.a)continue;const dd=pd-Date.parse(t.d);if(dd>=-5*86400000&&dd<=45*86400000&&Math.abs(dd)<best){best=Math.abs(dd);m=t;}}
       if(m){p.cx=true;m.cx=true;}}}
   return L;
 }
@@ -588,24 +588,82 @@ function pairCancels(list){
 let IDX=null;const MS=new Map();
 function rebuild(){const L=pairCancels(S.tx.concat(S.man));const bm=new Map();
   for(const t of L){if(t.cx)continue;const m=t.d.slice(0,7);let a=bm.get(m);if(!a)bm.set(m,a=[]);a.push(t);}
-  IDX={all:L,bm};MS.clear();}
+  IDX={all:L,bm};MS.clear();LOD.clear();}
 function monthTx(m){if(!IDX)rebuild();return IDX.bm.get(m)||[];}
-const EXC_SUB=["세금","공과금","전기세","수도세","가스비","관리비","아파트관리비","국민연금","건강보험","현금서비스","학교납입금"];
-const EXC_KW=["상품권","연회비","현금서비스","국세","지방세","아파트관리비","국민건강보험","국민연금","고용보험","기프트카드","선불카드"];
+/* ===== 실적 규칙 v07: 카드사 공식 상품 페이지 기준 (2026-10-03 리버 확인) =====
+   PERF_EXCL = 전월실적 제외 항목 / EARN_EXCL = 적립·캐시백 제외 항목 — 두 목록은 다르다. 혼용 금지 */
+const TXK={ /* 거래 판별기: 뱅샐 소분류(sub)·가맹점(c) 기준 */
+  cash:t=>/현금서비스|카드론|단기카드대출|장기카드대출/.test(t.c),
+  interest:t=>!/이자카야/.test(t.c)&&/연체이자|연체료|할부수수료|리볼빙|카드론이자|할부이자|이자청구/.test(t.c),
+  annualFee:t=>/연회비/.test(t.c),
+  cardFee:t=>/해외서비스수수료|해외이용수수료|카드수수료/.test(t.c),
+  tax:t=>t.sub==="세금"||/국세|지방세|세무서|위택스|이택스|홈택스/.test(t.c),
+  utility:t=>["공과금","전기세","수도세","가스비"].includes(t.sub)||/한국전력|수도요금|상수도/.test(t.c),
+  gas:t=>t.sub==="가스비"||/도시가스/.test(t.c),
+  fine:t=>/과태료|범칙금/.test(t.c),
+  apt:t=>["관리비","아파트관리비"].includes(t.sub)||/관리비/.test(t.c),
+  ins4:t=>/국민연금|건강보험공단|국민건강보험|고용보험|산재보험|근로복지공단/.test(t.c),
+  disabled:t=>/장애인고용/.test(t.c),
+  school:t=>t.sub==="학교납입금"||/학교|유치원|교육청/.test(t.c)&&/납입|급식|수업료/.test(t.c),
+  tuition:t=>/등록금|대학교/.test(t.c)&&/등록/.test(t.c),
+  rent:t=>/임대료|월세/.test(t.c),
+  gift:t=>/상품권|기프트카드|기프티/.test(t.c),
+  prepaid:t=>!TXK.ev(t)&&/페이충전|머니충전|포인트충전|캐시충전|선불카드|선불충전|기프트카드\s*충전/.test(t.c),
+  ev:t=>/EV충전|\bEV\b|전기차|충전기|차지비|환경부충전|에버온|급속충전/.test(t.c),
+  transit:t=>t.sub==="대중교통"||/지하철|티머니|캐시비|시내버스|마을버스|_버스/.test(t.c),
+  taxi:t=>t.sub==="택시"||/택시|카카오T|우버|UT /i.test(t.c),
+  fuel:t=>!TXK.ev(t)&&(t.sub==="주유"||/주유소|LPG|엘피지|가스충전소|오일뱅크/i.test(t.c)),
+  loMart:t=>/롯데마트|VIC마켓|빅마켓/.test(t.c),
+  speedmate:t=>/스피드메이트/.test(t.c),
+  famW:t=>/롯데백화점|롯데아울렛|롯데몰|롯데프리미엄아울렛/.test(t.c),
+  overseas:t=>/ US$|USD| US |\bUS\b/.test(t.c),
+};
+const PERF_EXCL={ /* [판별기, 사유] — 여기 없는 건 전부 실적 인정 */
+  sh:[["cash","현금서비스·카드론"],["interest","이자"],["annualFee","수수료(연회비)"],["cardFee","카드 수수료"]],
+  ha:[["tax","국세·지방세"],["utility","수도·전기·공과금"],["gas","도시가스"],["fine","과태료"],["apt","아파트관리비"],["ins4","4대보험"],["school","학교납입금"],["tuition","대학등록금"],["gift","상품권·기프트카드"],["prepaid","선불충전"],["rent","부동산임대료"],["cash","현금서비스"],["interest","이자"],["annualFee","연회비"]],
+  lo:[["tax","세금"],["gift","상품권·기프트"],["prepaid","선불충전"],["cash","현금서비스·카드론"],["annualFee","연회비"],["interest","이자·수수료"],["cardFee","수수료"],["speedmate","스피드메이트 할인 건"]],
+  ss:[["ins4","4대보험"],["disabled","장애인고용부담금"],["tax","국세·지방세"],["utility","공과금"],["tuition","대학등록금"],["transit","대중교통"],["taxi","택시"],["apt","아파트관리비"],["rent","부동산임대료"],["school","유치원·초중고 납입금"],["gift","상품권"],["prepaid","기프트·선불·페이 충전"],["cash","현금서비스"],["interest","이자"],["annualFee","연회비"]],
+};
+const PERF_HALBU_EXCL={sh:false,ha:false,lo:false,ss:true}; /* 무이자할부: 삼성만 실적 제외 */
+const EARN_EXCL={ /* 적립·캐시백 제외(실적과 별개) */
+  sh:["fuel","tax","utility","halbu"], /* 마일리지·마이신한포인트 */
+  ha:["halbu"],                         /* 하나머니 */
+};
+const PERF_NOTE={sh:"교통 반영월 확인 필요(공식 페이지에 전전월/전월 혼재)",lo:"패밀리W 계열사 할인(롯데백화점 등) 실적 제외 여부는 명세서 확인 필요"};
+/* 롯데: 할인이 '실제 적용된' 건만 실적 제외. 통합할인한도 = 전월 인정실적×5%, 미이월 */
+const LOD=new Map();
+function loDiscounts(m){
+  const key=m+"|"+today()+"|"+S.set.fuelPrice;if(LOD.has(key))return LOD.get(key);
+  const res={map:new Map(),limit:null,used:0};LOD.set(key,res);
+  const pm=addMonth(m,-1);let prevIn=null;
+  if(hasMonth(pm))prevIn=monthStat(pm).lo.ok;
+  if(prevIn!=null&&prevIn<300000){return res;}           /* 전월 실적 미달 → 할인 없음 → 전부 인정 */
+  let rem=prevIn!=null?prevIn*.05:Infinity;res.limit=prevIn!=null?prevIn*.05:null;
+  let mart=0;
+  const L=monthTx(m).filter(t=>t.card==="lo"&&t.a>0).sort((a,b)=>(a.d+a.tm).localeCompare(b.d+b.tm));
+  for(const t of L){let v=0;
+    if(TXK.fuel(t))v=t.a/(S.set.fuelPrice||1700)*80;
+    else if(TXK.transit(t)||TXK.taxi(t))v=t.a*.1;
+    else if(TXK.loMart(t)&&mart<2){v=Math.min(5000,t.a*.1);mart++;}
+    if(v<=0||rem<=0)continue;
+    const d=Math.min(v,rem);rem-=d;res.used+=d;res.map.set(txKey(t),d);}
+  return res;
+}
 function classify(t){
   const k=txKey(t);
   if(S.ov[k])return {s:S.ov[k],why:"직접 지정"};
   const mk=t.card+"|"+t.c;if(S.ovm&&S.ovm[mk])return {s:S.ovm[mk],why:"가맹점 지정"};
   for(const p of (S.preset||[]))if(p.card===t.card&&t.c.includes(p.k))return {s:p.s,why:p.why};
-  for(const r of S.rec)if(r.card===t.card&&t.c.includes(r.k))return r.hal?{s:"할부",why:"할부("+(r.until||"")+"까지)"}:{s:"인정",why:"정기결제"};
-  if(EXC_SUB.includes(t.sub))return {s:"제외",why:t.sub};
-  for(const w of EXC_KW)if(t.c.includes(w))return {s:"제외",why:w};
-  if(t.card==="ss"&&(t.sub==="택시"||t.sub==="대중교통"))return {s:"제외",why:"삼성: "+t.sub+" 실적 제외"};
-  if(t.c.includes("충전"))return {s:"확인",why:"선불충전?"};
+  for(const r of S.rec)if(r.card===t.card&&t.c.includes(r.k))return r.hal?{s:"할부",why:"무이자할부("+(r.until||"")+"까지)"}:{s:"인정",why:"정기결제"};
+  for(const [f,why] of (PERF_EXCL[t.card]||[]))if(TXK[f](t))return {s:"제외",why:why+" — 실적 제외"};
+  if(t.card==="lo"&&t.a>0){const d=loDiscounts(t.d.slice(0,7)).map.get(k);
+    if(d!=null)return {s:"제외",why:`롯데 할인 적용 ${won(d)} — 실적 제외`};
+    if(TXK.fuel(t)||TXK.transit(t)||TXK.taxi(t)||TXK.loMart(t))return {s:"인정",why:"할인 미적용(한도 소진·전월 미달) → 실적 인정"};
+    if(TXK.famW(t))return {s:"인정",why:"패밀리W 할인 여부 명세서 확인 필요"};}
+  if(t.card==="sh"&&(TXK.transit(t)||TXK.taxi(t)))return {s:"인정",why:"교통 반영월 확인 필요"};
   return {s:"인정",why:""};
 }
-/* 할부 건 처리: 삼성·하나는 실적 제외, 신한·롯데는 실적 인정 */
-function counts(st,card){if(st==="인정")return "ok";if(st==="할부")return cardBy(card).hal==="exclude"?"no":"ok";if(st==="확인")return "ck";return "no";}
+function counts(st,card){if(st==="인정")return "ok";if(st==="할부")return PERF_HALBU_EXCL[card]?"no":"ok";if(st==="확인")return "ck";return "no";}
 function allTx(){if(!IDX)rebuild();return IDX.all;}
 function monthStat(m){
   const ck_=m+"|"+today();if(MS.has(ck_))return MS.get(ck_);
@@ -615,7 +673,7 @@ function monthStat(m){
   if(m===CUR()){
     for(const rc of S.rec){if(rc.until&&m>rc.until)continue;
       const hit=L.some(t=>t.card===rc.card&&t.c.includes(rc.k));
-      if(!hit){const r=res[rc.card];if(!r)continue;r.plAll+=rc.a;if(rc.hal)r.hal+=rc.a;if(!(rc.hal&&cardBy(rc.card).hal==="exclude")){r.pl+=rc.a;if(!rc.hal)r.fq+=rc.a;}
+      if(!hit){const r=res[rc.card];if(!r)continue;r.plAll+=rc.a;if(rc.hal)r.hal+=rc.a;if(!(rc.hal&&PERF_HALBU_EXCL[rc.card])){r.pl+=rc.a;if(!rc.hal)r.fq+=rc.a;}
         r.plItems.push(Object.assign({},rc,{late:Number(today().slice(8))>rc.d}));}}
   }
   MS.set(ck_,res);return res;
@@ -668,11 +726,12 @@ function earnedThisMonth(){
   const L=monthTx(m);
   for(const c of DATA.cards){let v=0;const ps=prevStatus(c.id);
     const tx=L.filter(t=>t.card===c.id);
-    if(c.id==="sh")v+=tx.filter(t=>txCat(t)!=="fuel").reduce((s,t)=>s+Math.floor(Math.max(0,t.a)/1500),0)*S.set.mileWon;
-    if(c.id==="ha")v+=tx.reduce((s,t)=>s+t.a*.01,0);
+    const earnOk=t=>{const ex=EARN_EXCL[c.id]||[];if(ex.includes("halbu")&&classify(t).s==="할부")return false;return !ex.some(f=>f!=="halbu"&&TXK[f]&&TXK[f](t));};
+    if(c.id==="sh")v+=tx.filter(earnOk).reduce((s,t)=>s+Math.floor(Math.max(0,t.a)/1500),0)*S.set.mileWon;
+    if(c.id==="ha")v+=tx.filter(earnOk).reduce((s,t)=>s+t.a*.01,0);
     for(const b of DATA.ben[c.id]){const k=b.g||b.pool;if(!k||b.type==="once")continue;if(needOk(b,ps)===false)continue;
       const u=used[k];if(typeof u!=="number")continue;v+=b.cap?Math.min(b.cap,u):0;}
-    if(c.id==="lo"&&ps.amt!=null&&ps.ok){v+=Math.min(ps.amt*.05,typeof used.lo5==="number"?used.lo5:0);}
+    if(c.id==="lo"){v=loDiscounts(m).used;}
     if(c.id==="ss"&&ps.amt!=null){const t=DATA.ben.ss[0].tiers.filter(x=>ps.amt>=x[0]).pop();if(t&&tx.some(x=>txCat(x)==="samsungsub"))v+=t[1];}
     out[c.id]=Math.max(0,v);}
   return out;}
@@ -711,7 +770,7 @@ function renderP1(){
       <div class="cmeta" data-crow="${c.id}" style="cursor:pointer">${isCur?`${pv} · 받은 혜택 ${won(earn[c.id])}`:`${mlabel(m)} 실적`}${r.ck?` · 확인 필요 ${man(r.ck)}`:""} · <span style="text-decoration:underline">${OPENROW===c.id?"내역 닫기":"내역 보기"}</span></div>
       ${OPENROW===c.id&&window.renderMonthDetail?`<div class="mdet">${renderMonthDetail(m,c.id)}</div>`:""}`;
   }
-  h+=`<div class="note2"><span class="lg" style="background:${ST},#3f9a8c"></span>고정 결제됨 <span class="lg" style="background:${STL},#3f9a8c50"></span>고정 예정 <span class="lg" style="background:#3f9a8c"></span>일반 사용<br>▼ 실적 기준 · 기준 넘은 부분은 한 톤 진하게 · 카드값은 할부 포함</div></div>`;
+  h+=`<div class="note2"><span class="lg" style="background:${ST},#3f9a8c"></span>고정 결제됨 <span class="lg" style="background:${STL},#3f9a8c50"></span>고정 예정 <span class="lg" style="background:#3f9a8c"></span>일반 사용<br>▼ 실적 기준 · 기준 넘은 부분은 한 톤 진하게 · 카드값은 할부 포함<br>※ 신한: ${PERF_NOTE.sh} · 롯데: ${PERF_NOTE.lo}</div></div>`;
   const et=monthTx(m).filter(t=>t.card==="etc");
   if(et.length){const g={};for(const t of et){const n=window.etcLabel?etcLabel(t):"기타";g[n]=g[n]||[0,0];g[n][0]++;g[n][1]+=t.a;}
     h+=`<div class="box muted">${Object.entries(g).map(([n,v])=>`${esc(n)} ${v[0]}건 ${won(v[1])}`).join(" · ")} — 실적 계산에서 제외, 기록만 보관</div>`;}
