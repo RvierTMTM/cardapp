@@ -103,6 +103,7 @@ nav button.on{color:var(--acc);font-weight:700;box-shadow:inset 0 3px 0 var(--ac
 .cv small{display:block;font-size:11px;color:var(--sub);margin-top:2px;white-space:nowrap}
 .cmeta{font-size:11.5px;color:var(--sub);margin:4px 0 0 44px;padding-bottom:10px;border-bottom:1px solid var(--line)}
 .zz{position:absolute;right:0;top:0;bottom:0;width:9px;background:var(--card);clip-path:polygon(100% 0,100% 100%,35% 100%,80% 83%,35% 66%,80% 50%,35% 33%,80% 16%,35% 0)}
+.mtk{position:absolute;top:0;bottom:0;width:0;border-left:2px dashed #c026d3}.mlw{position:relative;height:15px;margin-bottom:3px}.ml{position:absolute;top:1px;transform:translateX(-50%);font-size:10px;color:#c026d3;white-space:nowrap;font-weight:700}
 .sc{border-top:1px solid var(--line);padding:12px 0 4px}.sc:first-of-type{border-top:0}
 .sc>summary{list-style:none;cursor:pointer}.sc>summary::-webkit-details-marker{display:none}
 .sh{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:2px 10px}.sl{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 6px}.ij{font-weight:700;font-size:13px;margin-left:auto;white-space:nowrap}.sh b{font-size:15px;white-space:nowrap}
@@ -220,7 +221,7 @@ nav button{font-size:13px}
 "use strict";
 /* ================= 데이터 (카드사 공식 페이지 2026-09-25 조사, 리버 확인) ================= */
 const DATA={
-ver:"261026-v3.2",
+ver:"261026-v3.3",
 cards:[
  {id:"sh",name:"신한 The BEST-F",short:"신한",color:"var(--c-sh)",pay:"The BEST-F 스카이패스",th:[300000],unlock:13900,
   unlockNote:"스벅 3,900 + 백화점·마트 5% 한도 1만",hal:"count",pay_day:15},
@@ -792,6 +793,8 @@ function renderP1(){
     const bars=[[r.ok,"gk"],[r.pl,"gk hh"],[r.no,"or"],[plNo,"or hh"],[ckv,"ckk"]].filter(x=>x[0]>0).map(x=>`<i class="${x[1]}" style="width:${w(x[0])}%"></i>`).join("");
     const tl=th.map(t=>`<span class="tl" style="left:${w(t)}%">${man(t)}</span>`).join("");
     const tk=th.map(t=>`<div class="tkm" style="left:${w(t)}%"></div>`).join("");
+    const MT=c.id==="ha"?[[300000,"0.1%"],[700000,"0.2%"]]:[];
+    const mtk=MT.map(x=>`<div class="mtk" style="left:${w(x[0])}%"></div>`).join(""),mtl=MT.length?`<div class="mlw">${MT.map(x=>`<span class="ml" style="left:${w(x[0])}%">▲${man(x[0])} 마통 ${x[1]}</span>`).join("")}</div>`:"";
     const exp=r.ok+r.pl,tgt=th.find(t=>exp<t)||thL;
     const fx=isCur?S.rec.filter(rc=>rc.card===c.id&&!(rc.until&&nm>rc.until)):[];
     const fxt=fx.reduce((a,x)=>a+x.a,0),fxh=fx.filter(x=>x.hal),fxr=fx.filter(x=>!x.hal);
@@ -804,17 +807,21 @@ function renderP1(){
     if(r.pl)more+=rowD("예정 인정","+"+man(r.pl));
     if(plNo)more+=rowD("예정 미인정 ("+r.plItems.filter(x=>x.hal&&PERF_HALBU_EXCL[c.id]).map(x=>esc(x.l)).join(", ")+")",man(plNo),"ot");
     if(tgt>exp)more+=rowD(man(tgt)+"까지 더 필요",man(tgt-exp));
+    if(c.id==="ha"&&isCur){const MR=[[300000,.001],[700000,.002]],lv=MR.filter(x=>tot>=x[0]).length,nx=MR[lv];
+      more=rowD("마통 이자감면 ("+nm.slice(5)+"/13 인출 예정)",man(tot)+" → "+(lv?(lv===2?"0.2%":"0.1%")+" 구간":"감면 없음"),"gt")+(nx?rowD("마통 "+(lv?"0.2%":"0.1%")+"까지 더 필요",man(nx[0]-tot)):"")+more;
+      const lb=S.set.loanBal;if(lb){const f=r2=>Math.round(lb*r2/12/1000)*1000;const cur=lv?f(MR[lv-1][1]):0;
+        more=more.replace(/(<div class="rw"><span>지금까지 사용·인정)/,rowD("감면 효과 (월)",won(cur)+(lv<2?" → 0.2%면 "+won(f(.002)):""),"gt")+"$1");}}
     if(fxh.length)more+=rowD("고정 결제 중 할부 ("+fxh.map(x=>esc(x.l)+(x.until?" ~"+x.until.slice(2):"")).join(", ")+")",man(fxh.reduce((a,x)=>a+x.a,0)),"ot");
     if(fxr.length)more+=`<details class="in"><summary><div class="rw"><span>고정 결제 중 정기결제 ▾</span><span>${man(fxr.reduce((a,x)=>a+x.a,0))}</span></div></summary>${fxr.map(x=>`<div class="rw sb2"><span>매월 ${x.d}일 ${esc(x.l)}</span><span>${man(x.a)}</span></div>`).join("")}</details>`;
     h+=`<details class="sc"><summary>
       <div class="sh"><span class="sl"><b><span class="dot" style="background:${c.color}"></span>${c.short}</b><span class="rt">${man(tot)} <small>(사용${man(r.use).replace("만","")}+예정${man(r.plAll).replace("만","")})</small></span></span><span class="ij gt">인정 ${man(exp).replace("만","")}/${man(tgt)}${exp>=th[0]?" ✓":""}</span></div>
-      <div class="sbw">${tl}<div class="sbar">${bars}${tk}${tot>SCG?'<span class="zz"></span>':""}</div></div>
+      <div class="sbw">${tl}<div class="sbar">${bars}${tk}${mtk}${tot>SCG?'<span class="zz"></span>':""}</div>${mtl}</div>
       ${isCur?`<div class="rw"><span>다음달 고정 결제</span><b>${man(fxt)}</b></div>`:""}
       <div class="tp">눌러서 자세히 ▾</div></summary><div class="mo">${more}</div></details>
       <div class="cmeta" data-crow="${c.id}" style="cursor:pointer;margin-left:0">${isCur?`${pv} · 받은 혜택 ${won(earn[c.id])}`:`${mlabel(m)} 실적`}${r.ck?` · 확인 필요 ${man(r.ck)}`:""} · <span style="text-decoration:underline">${OPENROW===c.id?"내역 닫기":"내역 보기"}</span></div>
       ${OPENROW===c.id&&window.renderMonthDetail?`<div class="mdet" style="margin-left:0">${renderMonthDetail(m,c.id)}</div>`:""}`;
   }
-  h+=`<div class="note2"><span class="lg gk"></span>인정 <span class="lg gk hh"></span>예정(인정) <span class="lg or"></span>미인정 <span class="lg or hh"></span>예정(미인정)<br>막대 길이는 카드 간 같은 금액 눈금(절대치) · 막대 위 숫자 = 실적 기준 · 인정 = 예정 포함 실적 인정액 · 카드명 옆 금액 = 이번달 카드값(예정 포함, 할부 포함) · 고정 결제 = 등록된 정기결제 + 남은 할부</div>`;
+  h+=`<div class="note2"><span class="lg gk"></span>인정 <span class="lg gk hh"></span>예정(인정) <span class="lg or"></span>미인정 <span class="lg or hh"></span>예정(미인정)<br>막대 길이는 카드 간 같은 금액 눈금(절대치) · 막대 위 숫자 = 실적 기준 · 인정 = 예정 포함 실적 인정액 · 카드명 옆 금액 = 다음달 결제 예정액(예정·할부 포함) · 고정 결제 = 등록된 정기결제 + 남은 할부</div>`;
   const et=monthTx(m).filter(t=>t.card==="etc");
   if(et.length){const g={};for(const t of et){const n=window.etcLabel?etcLabel(t):"기타";g[n]=g[n]||[0,0];g[n][0]++;g[n][1]+=t.a;}
     h+=`<div class="box muted">${Object.entries(g).map(([n,v])=>`${esc(n)} ${v[0]}건 ${won(v[1])}`).join(" · ")} — 실적 계산에서 제외, 기록만 보관</div>`;}
@@ -962,6 +969,7 @@ function renderP4(){
   <details style="margin-top:8px"><summary class="muted">연결 설정</summary>
   <div style="margin-top:6px">OAuth Client ID</div><input id="gcid" value="${esc(S.set.gcid||"")}" placeholder="xxxx.apps.googleusercontent.com">
   <div style="margin-top:6px">지메일 검색식 <span class="muted">(비우면 기본)</span></div><input id="gmailq" value="${esc(S.set.gmailQ||"")}" placeholder="${esc(GM_Q_DEFAULT)}">
+  <div style="margin-top:6px">하나 마통 대출잔액 <span class="muted">(원, 이자감면 효과 계산용 · 비우면 숨김)</span></div><input id="loanbal" inputmode="numeric" value="${S.set.loanBal||""}" placeholder="예: 71796026">
   <div style="margin-top:6px">폴더 이름</div><input id="dfolder" value="${esc(S.set.dfolder||"카드관리")}">
   <button id="gsave" style="width:100%;margin-top:6px">연결 설정 저장</button></details></div>
   <div class="box"><h2>파일로 동기화</h2>
@@ -1165,7 +1173,7 @@ document.addEventListener("click",async e=>{
   if(b.id==="dsync"||b.id==="msync")return gmailSync();
   if(b.id==="dsync2")return driveSync();
   if(b.id==="zpclr"){zpSet("");const i=document.getElementById("zpw");if(i)i.value="";renderAll();toast("저장된 비밀번호를 지웠어요");return;}
-  if(b.id==="gsave"){S.set.gmailQ=$("#gmailq").value.trim();S.set.gcid=$("#gcid").value.trim();S.set.dfolder=$("#dfolder").value.trim()||"카드관리";delete S.set.dFolderId;save();toast("저장");return;}
+  if(b.id==="gsave"){S.set.gmailQ=$("#gmailq").value.trim();S.set.loanBal=Math.max(0,parseInt(($("#loanbal").value||"").replace(/[^0-9]/g,""),10)||0)||undefined;S.set.gcid=$("#gcid").value.trim();S.set.dfolder=$("#dfolder").value.trim()||"카드관리";delete S.set.dFolderId;save();toast("저장");return;}
   if(d.ov){S.ov[d.ov]=d.v;const pp=d.ov.split("|");S.ovm=S.ovm||{};S.ovm[pp[0]+"|"+pp[3]]=d.v;save();renderAll();toast(d.v+"로 지정");return;}
   if(d.pok){const k=d.pok+"|"+CUR();if(d.v==="")delete S.prevOk[k];else S.prevOk[k]=d.v==="1";save();renderAll();return;}
   if(d.used){const m=CUR();if(S.used[d.used]&&S.used[d.used].m===m)delete S.used[d.used];else S.used[d.used]={m};save();renderP3();return;}
