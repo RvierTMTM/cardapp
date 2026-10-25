@@ -102,10 +102,11 @@ nav button.on{color:var(--acc);font-weight:700;box-shadow:inset 0 3px 0 var(--ac
 .cbig{font-weight:800;font-size:16px}.cbig.ok{color:var(--ok)}
 .cv small{display:block;font-size:11px;color:var(--sub);margin-top:2px;white-space:nowrap}
 .cmeta{font-size:11.5px;color:var(--sub);margin:4px 0 0 44px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.zz{position:absolute;right:0;top:0;bottom:0;width:9px;background:var(--card);clip-path:polygon(100% 0,100% 100%,35% 100%,80% 83%,35% 66%,80% 50%,35% 33%,80% 16%,35% 0)}
 .sc{border-top:1px solid var(--line);padding:12px 0 4px}.sc:first-of-type{border-top:0}
 .sc>summary{list-style:none;cursor:pointer}.sc>summary::-webkit-details-marker{display:none}
-.sh{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:2px 8px}.sh b{font-size:16px}
-.rt{font-weight:700;font-size:15px;margin-left:auto;text-align:right}.rt small{color:var(--sub);font-weight:400;font-size:11px}
+.sh{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:2px 10px}.sl{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 6px}.ij{font-weight:700;font-size:13px;margin-left:auto;white-space:nowrap}.sh b{font-size:15px;white-space:nowrap}
+.rt{font-weight:700;font-size:14px;white-space:nowrap}.rt small{color:var(--sub);font-weight:400;font-size:10.5px}
 .sbw{position:relative;padding-top:15px;margin-top:2px}.tl{position:absolute;top:0;transform:translateX(-50%);font-size:10px;color:var(--sub);white-space:nowrap}
 .sbar{position:relative;height:18px;background:var(--line);border-radius:9px;overflow:hidden;margin-bottom:8px;display:flex}
 .sbar i{display:block;height:100%}.tkm{position:absolute;top:0;bottom:0;width:2px;background:var(--ink);opacity:.6}
@@ -219,7 +220,7 @@ nav button{font-size:13px}
 "use strict";
 /* ================= 데이터 (카드사 공식 페이지 2026-09-25 조사, 리버 확인) ================= */
 const DATA={
-ver:"261026-v11",
+ver:"261026-v3.2",
 cards:[
  {id:"sh",name:"신한 The BEST-F",short:"신한",color:"var(--c-sh)",pay:"The BEST-F 스카이패스",th:[300000],unlock:13900,
   unlockNote:"스벅 3,900 + 백화점·마트 5% 한도 1만",hal:"count",pay_day:15},
@@ -783,9 +784,10 @@ function renderP1(){
   const STL="repeating-linear-gradient(135deg,rgba(0,0,0,.10) 0 2px,transparent 2px 6px)";
   h+=`<div class="box">`;
   const nm=addMonth(m,1);
+  const SCG=Math.max(Math.max(...AC.map(c=>c.th[c.th.length-1])),Math.min(Math.max(...AC.map(c=>st[c.id].use+st[c.id].plAll)),1500000))*1.06;
   for(const c of AC){
     const r=st[c.id],th=c.th,thL=th[th.length-1];
-    const plNo=Math.max(0,r.plAll-r.pl),ckv=r.ck||0,tot=r.use+r.plAll,sc=Math.max(tot,thL)*1.06;
+    const plNo=Math.max(0,r.plAll-r.pl),ckv=r.ck||0,tot=r.use+r.plAll,sc=SCG;
     const w=v=>Math.max(0,v)/sc*100;
     const bars=[[r.ok,"gk"],[r.pl,"gk hh"],[r.no,"or"],[plNo,"or hh"],[ckv,"ckk"]].filter(x=>x[0]>0).map(x=>`<i class="${x[1]}" style="width:${w(x[0])}%"></i>`).join("");
     const tl=th.map(t=>`<span class="tl" style="left:${w(t)}%">${man(t)}</span>`).join("");
@@ -805,15 +807,14 @@ function renderP1(){
     if(fxh.length)more+=rowD("고정 결제 중 할부 ("+fxh.map(x=>esc(x.l)+(x.until?" ~"+x.until.slice(2):"")).join(", ")+")",man(fxh.reduce((a,x)=>a+x.a,0)),"ot");
     if(fxr.length)more+=`<details class="in"><summary><div class="rw"><span>고정 결제 중 정기결제 ▾</span><span>${man(fxr.reduce((a,x)=>a+x.a,0))}</span></div></summary>${fxr.map(x=>`<div class="rw sb2"><span>매월 ${x.d}일 ${esc(x.l)}</span><span>${man(x.a)}</span></div>`).join("")}</details>`;
     h+=`<details class="sc"><summary>
-      <div class="sh"><b><span class="dot" style="background:${c.color}"></span>${c.short}</b><span class="rt">${man(tot)}${r.plAll?` <small>(사용 ${man(r.use)} + 예정 ${man(r.plAll)})</small>`:""}</span></div>
-      <div class="sbw">${tl}<div class="sbar">${bars}${tk}</div></div>
-      <div class="rw"><span>실적 인정 (예정 포함)</span><b class="gt">${man(exp)} / ${man(tgt)}${exp>=th[0]?" ✓":""}</b></div>
+      <div class="sh"><span class="sl"><b><span class="dot" style="background:${c.color}"></span>${c.short}</b><span class="rt">${man(tot)} <small>(사용${man(r.use).replace("만","")}+예정${man(r.plAll).replace("만","")})</small></span></span><span class="ij gt">인정 ${man(exp).replace("만","")}/${man(tgt)}${exp>=th[0]?" ✓":""}</span></div>
+      <div class="sbw">${tl}<div class="sbar">${bars}${tk}${tot>SCG?'<span class="zz"></span>':""}</div></div>
       ${isCur?`<div class="rw"><span>다음달 고정 결제</span><b>${man(fxt)}</b></div>`:""}
       <div class="tp">눌러서 자세히 ▾</div></summary><div class="mo">${more}</div></details>
       <div class="cmeta" data-crow="${c.id}" style="cursor:pointer;margin-left:0">${isCur?`${pv} · 받은 혜택 ${won(earn[c.id])}`:`${mlabel(m)} 실적`}${r.ck?` · 확인 필요 ${man(r.ck)}`:""} · <span style="text-decoration:underline">${OPENROW===c.id?"내역 닫기":"내역 보기"}</span></div>
       ${OPENROW===c.id&&window.renderMonthDetail?`<div class="mdet" style="margin-left:0">${renderMonthDetail(m,c.id)}</div>`:""}`;
   }
-  h+=`<div class="note2"><span class="lg gk"></span>인정 <span class="lg gk hh"></span>예정(인정) <span class="lg or"></span>미인정 <span class="lg or hh"></span>예정(미인정)<br>막대 위 숫자 = 실적 기준 · 카드명 옆 금액 = 이번달 카드값(예정 포함, 할부 포함) · 고정 결제 = 등록된 정기결제 + 남은 할부</div>`;
+  h+=`<div class="note2"><span class="lg gk"></span>인정 <span class="lg gk hh"></span>예정(인정) <span class="lg or"></span>미인정 <span class="lg or hh"></span>예정(미인정)<br>막대 길이는 카드 간 같은 금액 눈금(절대치) · 막대 위 숫자 = 실적 기준 · 인정 = 예정 포함 실적 인정액 · 카드명 옆 금액 = 이번달 카드값(예정 포함, 할부 포함) · 고정 결제 = 등록된 정기결제 + 남은 할부</div>`;
   const et=monthTx(m).filter(t=>t.card==="etc");
   if(et.length){const g={};for(const t of et){const n=window.etcLabel?etcLabel(t):"기타";g[n]=g[n]||[0,0];g[n][0]++;g[n][1]+=t.a;}
     h+=`<div class="box muted">${Object.entries(g).map(([n,v])=>`${esc(n)} ${v[0]}건 ${won(v[1])}`).join(" · ")} — 실적 계산에서 제외, 기록만 보관</div>`;}
@@ -821,10 +822,10 @@ function renderP1(){
   if(ck.length)h+=`<div class="box"><h3>확인 필요 ${ck.length}건 <span class="muted">— 탭해서 지정</span></h3>${ck.map(txRow).join("")}</div>`;
   /* 월별 추이 */
   const ms=[addMonth(m,-2),addMonth(m,-1),m].filter(hasMonth);
-  if(ms.length){h+=`<div class="box"><h3>월별 인정 실적</h3>`;
+  if(ms.length){const MXG=Math.max(...AC.map(c=>c.th[0]),Math.min(Math.max(...AC.flatMap(c=>ms.map(x=>monthStat(x)[c.id].ok))),1500000))*1.03;h+=`<div class="box"><h3>월별 인정 실적 <span class="muted">(카드 간 같은 금액 눈금)</span></h3>`;
     for(const c of AC){h+=`<div style="margin:6px 0 2px"><b>${c.short}</b> <span class="muted">기준 ${man(c.th[0])}</span></div>`;
-      const mx=Math.max(c.th[0]*2,...ms.map(x=>monthStat(x)[c.id].ok));
-      for(const x of ms){const v=monthStat(x)[c.id].ok;h+=`<div class="tr"><span class="l">${mlabel(x)}</span><span class="tb"><i style="width:${v/mx*100}%;background:${c.color};opacity:${v>=c.th[0]?1:.45}"></i><b class="tmk" style="left:${c.th[0]/mx*100}%;background:color-mix(in srgb,color-mix(in srgb,${c.color} 35%,#fff) 90%,#000)"></b></span><span class="v">${man(v)}</span></div>`;}}
+      const mx=MXG;
+      for(const x of ms){const v=monthStat(x)[c.id].ok;h+=`<div class="tr"><span class="l">${mlabel(x)}</span><span class="tb"><i style="width:${Math.min(100,v/mx*100)}%;background:${c.color};opacity:${v>=c.th[0]?1:.45}"></i>${v>mx?'<span class="zz"></span>':""}<b class="tmk" style="left:${c.th[0]/mx*100}%;background:color-mix(in srgb,color-mix(in srgb,${c.color} 35%,#fff) 90%,#000)"></b></span><span class="v">${man(v)}</span></div>`;}}
     h+=`</div>`;}
   h+=`<div class="box"><h3>업종 고르기 → 결제추천</h3><div class="grid">${DATA.cats.map(c=>`<button data-cat="${c.id}">${c.l}</button>`).join("")}</div></div>`;
   $("#p1").innerHTML=h;
