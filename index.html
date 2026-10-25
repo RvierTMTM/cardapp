@@ -204,7 +204,7 @@ nav button{font-size:13px}
 "use strict";
 /* ================= 데이터 (카드사 공식 페이지 2026-09-25 조사, 리버 확인) ================= */
 const DATA={
-ver:"261003-v09",
+ver:"261025-v10",
 cards:[
  {id:"sh",name:"신한 The BEST-F",short:"신한",color:"var(--c-sh)",pay:"The BEST-F 스카이패스",th:[300000],unlock:13900,
   unlockNote:"스벅 3,900 + 백화점·마트 5% 한도 1만",hal:"count",pay_day:15},
@@ -922,12 +922,21 @@ function renderP3(){
 /* ================= 화면 ④ 동기화/입력 ================= */
 function renderP4(){
   const ms=[...new Set(allTx().map(t=>ym(t.d)))].sort();
-  let h=`<div class="box"><h2>구글 드라이브 동기화</h2>
+  const zs=zpGet()?1:0;
+  let h=`<div class="box"><h2>지메일에서 동기화</h2>
+  <div class="muted">뱅샐 [파일로 받기] 후 → 이 버튼. 지메일의 최근 뱅샐 메일 zip을 앱이 풀어 바로 반영해요. (인터넷 필요 · 위 ↻ 동기화도 같은 동작)</div>
+  <input id="zpw" type="password" autocomplete="off" placeholder="압축 비밀번호${zs?" (저장됨 — 바꿀 때만 입력)":S.set.zpNoSave?" (매번 입력)":""}" style="margin-top:8px">
+  <button class="pri" id="msync" style="width:100%;margin-top:8px">지메일에서 동기화</button>
+  <div class="muted" style="margin-top:6px">${S.set.gmailAt?`${esc(S.set.gmailAt)} 메일에서 가져옴`:"아직 없음"}</div>
+  <div class="row" style="margin-top:6px"><label style="white-space:nowrap"><input type="checkbox" id="zpns" style="width:auto"${S.set.zpNoSave?" checked":""}> 비밀번호 저장 안 함(매번 입력)</label>${zs?`<button class="sm" id="zpclr">저장된 비밀번호 지우기</button>`:""}</div>
+  <div class="muted" style="margin-top:4px">비밀번호는 이 폰 브라우저에만 저장돼요. 코드·깃허브·드라이브 백업에는 안 들어가요.</div></div>
+  <div class="box"><h2>구글 드라이브 동기화</h2>
   <div class="muted">드라이브 「${esc(S.set.dfolder||"카드관리")}」 폴더에서 가장 최근 xlsx를 가져와요. (인터넷 필요)</div>
   <button class="pri" id="dsync2" style="width:100%;margin-top:8px">드라이브에서 동기화</button>
   <div class="muted" style="margin-top:6px">${S.dfile?`마지막: ${esc(S.dfile)}`:""}</div>
   <details style="margin-top:8px"><summary class="muted">연결 설정</summary>
   <div style="margin-top:6px">OAuth Client ID</div><input id="gcid" value="${esc(S.set.gcid||"")}" placeholder="xxxx.apps.googleusercontent.com">
+  <div style="margin-top:6px">지메일 검색식 <span class="muted">(비우면 기본)</span></div><input id="gmailq" value="${esc(S.set.gmailQ||"")}" placeholder="${esc(GM_Q_DEFAULT)}">
   <div style="margin-top:6px">폴더 이름</div><input id="dfolder" value="${esc(S.set.dfolder||"카드관리")}">
   <button id="gsave" style="width:100%;margin-top:6px">연결 설정 저장</button></details></div>
   <div class="box"><h2>파일로 동기화</h2>
@@ -969,6 +978,125 @@ function applyTx(tx,name){
   const mb=S.man.length;S.man=S.man.filter(t=>t.d<lo||t.d>hi);const mr=mb-S.man.length;
   const ms=new Set(tx.map(t=>ym(t.d)));
   S.file=name;S.syncAt=today()+" "+new Date().toTimeString().slice(0,5);save();renderAll();toast(`${tx.length}건 반영 (${[...ms].sort().map(mlabel).join(",")})${mr?` · 수동입력 ${mr}건 정리`:""}`);}
+/* ===== 비밀번호 zip 풀기 (외부 라이브러리 없음) — ZipCrypto + WinZip AES(AE-1/AE-2, 128/192/256) =====
+   주의: WinZip AES의 CTR 카운터는 128비트 '리틀엔디안'(1부터 시작) — WebCrypto AES-CTR(빅엔디안)을 쓰면 안 됨.
+   그래서 카운터 블록을 직접 만들어 AES로 한 블록씩 암호화(키스트림)하고 XOR 한다. */
+const ZX={
+  crcT:null,
+  crc32(u,c){if(!ZX.crcT){const t=new Uint32Array(256);for(let n=0;n<256;n++){let x=n;for(let k=0;k<8;k++)x=x&1?0xEDB88320^(x>>>1):x>>>1;t[n]=x>>>0;}ZX.crcT=t;}
+    let x=(c===undefined?0:c)^0xFFFFFFFF;for(let i=0;i<u.length;i++)x=ZX.crcT[(x^u[i])&255]^(x>>>8);return (x^0xFFFFFFFF)>>>0;},
+  /* 중앙 디렉터리 읽기 */
+  list(u){const dv=new DataView(u.buffer,u.byteOffset,u.byteLength);let e=-1;
+    for(let i=u.length-22;i>=Math.max(0,u.length-22-65535);i--)if(dv.getUint32(i,true)===0x06054b50){e=i;break;}
+    if(e<0)throw new Error("zip 파일이 아니에요");
+    const n=dv.getUint16(e+10,true);let p=dv.getUint32(e+16,true);const out=[];
+    for(let i=0;i<n;i++){if(dv.getUint32(p,true)!==0x02014b50)throw new Error("zip 목록이 깨졌어요");
+      const o={flags:dv.getUint16(p+8,true),method:dv.getUint16(p+10,true),time:dv.getUint16(p+12,true),crc:dv.getUint32(p+16,true),
+        csize:dv.getUint32(p+20,true),usize:dv.getUint32(p+24,true),lho:dv.getUint32(p+42,true)};
+      const nl=dv.getUint16(p+28,true),el=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true);
+      o.name=new TextDecoder(o.flags&0x800?"utf-8":"utf-8").decode(u.subarray(p+46,p+46+nl));
+      o.extra=u.subarray(p+46+nl,p+46+nl+el);
+      if(o.csize===0xFFFFFFFF||o.usize===0xFFFFFFFF||o.lho===0xFFFFFFFF)throw new Error("zip64는 지원하지 않아요");
+      out.push(o);p+=46+nl+el+cl;}
+    return out;},
+  /* 항목의 원시(암호화된) 바이트 */
+  raw(u,o){const dv=new DataView(u.buffer,u.byteOffset,u.byteLength);
+    if(dv.getUint32(o.lho,true)!==0x04034b50)throw new Error("zip 본문 위치가 깨졌어요");
+    const s=o.lho+30+dv.getUint16(o.lho+26,true)+dv.getUint16(o.lho+28,true);return u.subarray(s,s+o.csize);},
+  aesInfo(extra){const dv=new DataView(extra.buffer,extra.byteOffset,extra.byteLength);
+    for(let i=0;i+4<=extra.length;){const id=dv.getUint16(i,true),sz=dv.getUint16(i+2,true);
+      if(id===0x9901)return {ver:dv.getUint16(i+4,true),strength:extra[i+8],method:dv.getUint16(i+9,true)};i+=4+sz;}
+    return null;},
+  /* ---- ZipCrypto ---- */
+  zipCrypto(raw,pw,o){
+    ZX.crc32(new Uint8Array(0));const key=[0x12345678,0x23456789,0x34567890],t=ZX.crcT;
+    const upd=c=>{key[0]=(t[(key[0]^c)&255]^(key[0]>>>8))>>>0;key[1]=(Math.imul((key[1]+(key[0]&255))>>>0,134775813)+1)>>>0;key[2]=(t[(key[2]^(key[1]>>>24))&255]^(key[2]>>>8))>>>0;};
+    for(const c of pw)upd(c);
+    const dec=c=>{const k=(key[2]|2)&0xFFFF;const m=(c^(((k*(k^1))>>>8)&255))&255;upd(m);return m;};
+    const out=new Uint8Array(raw.length-12);let chk=0;
+    for(let i=0;i<raw.length;i++){const m=dec(raw[i]);if(i<12)chk=m;else out[i-12]=m;}
+    const ok=chk===((o.crc>>>24)&255)||((o.flags&8)&&chk===((o.time>>>8)&255));
+    if(!ok)throw new ZX.PwErr();
+    return out;},
+  PwErr:class extends Error{constructor(){super("압축 비밀번호가 맞지 않아요");this.pw=true;}},
+  /* ---- WinZip AES ---- */
+  async aes(raw,pw,info){
+    const kl=[0,16,24,32][info.strength];if(!kl)throw new Error("지원하지 않는 AES 강도예요");
+    if(kl===24)throw new Error("AES-192 암호 zip은 이 브라우저(WebCrypto)가 지원하지 않아요 — 128/256으로 압축된 파일만 돼요");
+    const sl=kl/2;if(raw.length<sl+2+10)throw new Error("암호화 데이터가 너무 짧아요");
+    const salt=raw.subarray(0,sl),pwv=raw.subarray(sl,sl+2),ct=raw.subarray(sl+2,raw.length-10),mac=raw.subarray(raw.length-10);
+    const S=crypto.subtle,pk=await S.importKey("raw",pw,"PBKDF2",false,["deriveBits"]);
+    const d=new Uint8Array(await S.deriveBits({name:"PBKDF2",hash:"SHA-1",salt,iterations:1000},pk,(kl*2+2)*8));
+    if(d[kl*2]!==pwv[0]||d[kl*2+1]!==pwv[1])throw new ZX.PwErr();
+    const hk=await S.importKey("raw",d.subarray(kl,kl*2),{name:"HMAC",hash:"SHA-1"},false,["sign"]);
+    const sig=new Uint8Array(await S.sign("HMAC",hk,ct));
+    for(let i=0;i<10;i++)if(sig[i]!==mac[i])throw new Error("압축 파일이 손상됐어요(인증 코드 불일치)");
+    const ek=await S.importKey("raw",d.subarray(0,kl),"AES-CBC",false,["encrypt"]);   /* 0 IV의 CBC 한 블록 = ECB 한 블록 */
+    const nb=Math.ceil(ct.length/16),out=new Uint8Array(ct.length),iv=new Uint8Array(16);
+    for(let b0=0;b0<nb;b0+=1024){const b1=Math.min(nb,b0+1024);
+      const ks=await Promise.all(Array.from({length:b1-b0},(_,j)=>{const c=new Uint8Array(16);let v=b0+j+1;for(let q=0;q<8&&v>0;q++){c[q]=v%256;v=Math.floor(v/256);}   /* 리틀엔디안 카운터, 1부터 */
+        return S.encrypt({name:"AES-CBC",iv},ek,c).then(r=>new Uint8Array(r,0,16));}));
+      for(let j=0;j<ks.length;j++){const p=(b0+j)*16,n=Math.min(16,ct.length-p);for(let q=0;q<n;q++)out[p+q]=ct[p+q]^ks[j][q];}}
+    return out;},
+  async inflate(u){const ds=new DecompressionStream("deflate-raw");const w=ds.writable.getWriter();w.write(u).catch(()=>{});w.close().catch(()=>{});
+    return new Uint8Array(await new Response(ds.readable).arrayBuffer());},
+  /* 공개: zip(ArrayBuffer/Uint8Array)에서 xlsx 한 개를 풀어 {name,data} 반환. 비밀번호 없으면 pw="" */
+  async extractXlsx(buf,password){
+    const u=buf instanceof Uint8Array?buf:new Uint8Array(buf),es=ZX.list(u).filter(e=>!e.name.endsWith("/"));
+    const o=es.find(e=>/\.xlsx$/i.test(e.name))||(es.length===1?es[0]:null);if(!o)throw new Error("zip 안에 xlsx가 없어요");
+    const pw=new TextEncoder().encode(password||"");let raw=ZX.raw(u,o),method=o.method,data;
+    if(o.flags&0x40)throw new Error("지원하지 않는 암호화 방식이에요");
+    if(o.method===99){const info=ZX.aesInfo(o.extra);if(!info)throw new Error("AES 정보를 못 읽었어요");
+      if(!pw.length)throw new ZX.PwErr();
+      data=await ZX.aes(raw,pw,info);method=info.method;}
+    else if(o.flags&1){if(!pw.length)throw new ZX.PwErr();data=ZX.zipCrypto(raw,pw,o);}
+    else data=raw;
+    const zc=o.method!==99&&(o.flags&1);   /* ZipCrypto는 확인 바이트가 1/256로 우연히 맞을 수 있어, 풀기/CRC 실패는 '비밀번호 틀림'으로 본다 */
+    try{
+      if(method===8)data=await ZX.inflate(data);else if(method!==0)throw new Error("지원하지 않는 압축 방식("+method+")이에요");
+      if(o.crc!==0&&ZX.crc32(data)!==o.crc)throw new Error("압축 파일이 손상됐어요(CRC 불일치)");
+    }catch(e){if(zc&&!/지원하지/.test(e.message))throw new ZX.PwErr();throw e;}
+    return {name:o.name.split("/").pop(),data};}
+};
+
+/* ===== 지메일에서 뱅샐 zip 가져오기 (gmail.readonly) — 검색 결과 1건의 zip 첨부만 읽음. 토큰·비밀번호는 코드/백업에 넣지 않음 ===== */
+const GM_Q_DEFAULT="has:attachment filename:zip newer_than:30d (뱅크샐러드 OR banksalad)";
+const ZPK="cardapp.zp";   /* 압축 비밀번호: S(백업·내보내기에 실림)와 별개의 localStorage 키 — 이 폰 브라우저에만 */
+function zpGet(){try{return localStorage.getItem(ZPK)||"";}catch(e){return "";}}
+function zpSet(v){try{if(v)localStorage.setItem(ZPK,v);else localStorage.removeItem(ZPK);}catch(e){}}
+async function gjson(url,tok){const r=await fetch(url,{headers:{Authorization:"Bearer "+tok}});
+  if(r.status===401||r.status===403)throw new Error("지메일 권한이 없어요 (로그인 창에서 지메일 읽기를 허용해야 해요)");
+  if(!r.ok)throw new Error("지메일 "+r.status);return r.json();}
+function b64uBytes(t){const b=atob(t.replace(/-/g,"+").replace(/_/g,"/")),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
+async function gmailSync(){
+  if(!S.set.gcid){show("p4");const d=document.querySelector("details");if(d)d.open=true;return toast("연결 설정에 Client ID 먼저");}
+  if(!navigator.onLine)return toast("오프라인 — 인터넷 연결 후 다시");
+  const inp=document.getElementById("zpw"),typed=inp?inp.value:"",pw=typed||(S.set.zpNoSave?"":zpGet());
+  if(!pw){show("p4");const i2=document.getElementById("zpw");if(i2)i2.focus();return toast("압축 비밀번호를 먼저 입력해 주세요");}
+  try{toast("지메일 확인 중…");await loadGis();const tok=await getToken();
+    const G="https://gmail.googleapis.com/gmail/v1/users/me";
+    const l=await gjson(`${G}/messages?maxResults=1&fields=messages/id&q=${encodeURIComponent((S.set.gmailQ||"").trim()||GM_Q_DEFAULT)}`,tok);
+    if(!l.messages||!l.messages.length)throw new Error("최근 30일 안에 뱅샐 메일을 못 찾았어요 (검색식은 연결 설정에서)");
+    const id=l.messages[0].id;
+    if(S.set.gmailId===id&&S.tx.length){toast("이미 반영한 메일이에요 ("+(S.set.gmailAt||"")+") — 뱅샐에서 새로 내보낸 뒤 다시 눌러요");return;}
+    const L="filename,body(attachmentId)",F=`payload(${L},parts(${L},parts(${L},parts(${L}))))`;
+    const m=await gjson(`${G}/messages/${id}?format=full&fields=internalDate,${F}`,tok);
+    const att=[];(function w(x){if(x.filename&&x.body&&x.body.attachmentId)att.push(x);(x.parts||[]).forEach(w);})(m.payload||{});
+    const z=att.find(x=>/\.zip$/i.test(x.filename));
+    if(!z)throw new Error("가장 최근 메일에 zip 첨부가 없어요 (검색식 확인)");
+    toast("압축 푸는 중…");
+    const a=await gjson(`${G}/messages/${id}/attachments/${z.body.attachmentId}?fields=data`,tok);
+    let x;try{x=await ZX.extractXlsx(b64uBytes(a.data),pw);}
+    catch(e){if(e.pw){zpSet("");if(inp)inp.value="";}throw e;}
+    const buf=x.data.buffer.slice(x.data.byteOffset,x.data.byteOffset+x.data.byteLength);
+    const tx=await parseXlsx(buf);
+    const dt=new Date(+m.internalDate);S.set.gmailAt=`${dt.getMonth()+1}월 ${dt.getDate()}일 ${dt.getHours()}시`;S.set.gmailId=id;
+    applyTx(tx,x.name);
+    if(!S.set.zpNoSave)zpSet(pw);if(inp)inp.value="";
+    toast(S.set.gmailAt+" 메일에서 가져옴");
+    if(window.driveBackup)driveBackup(false);
+  }catch(err){toast("실패: "+err.message);}
+}
 let gTok=null,gExp=0;
 function loadGis(){return new Promise((res,rej)=>{if(window.google&&google.accounts&&google.accounts.oauth2)return res();
   const sc=document.createElement("script");sc.src="https://accounts.google.com/gsi/client";sc.onload=res;sc.onerror=()=>rej(new Error("인터넷 연결 필요"));document.head.appendChild(sc);});}
@@ -1009,8 +1137,10 @@ document.addEventListener("click",async e=>{
   if(d.paid){const amt=Number(window._amt)||0;if(!amt)return toast("금액이 없어요");const nm=(window._msel||window._mq||"").trim()||((DATA.cats.find(c=>c.id===selCat)||{}).l||"결제");
     S.man.push({d:today(),tm:new Date().toTimeString().slice(0,8),big:"",sub:"",c:nm,a:amt,card:d.paid,man:1});save();renderAll();toast(`${cardBy(d.paid).short} ${won(amt)} 기록 — 실적에 바로 반영`);return;}
   if(d.mer){selCat=d.mer;window._mq=d.mn;window._msel=d.mn;renderP2();setTimeout(()=>{$("#amt").focus()},30);toast(d.mn+" → "+(DATA.cats.find(c=>c.id===d.mer)||{}).l);return;}
-  if(b.id==="dsync"||b.id==="dsync2")return driveSync();
-  if(b.id==="gsave"){S.set.gcid=$("#gcid").value.trim();S.set.dfolder=$("#dfolder").value.trim()||"카드관리";delete S.set.dFolderId;save();toast("저장");return;}
+  if(b.id==="dsync"||b.id==="msync")return gmailSync();
+  if(b.id==="dsync2")return driveSync();
+  if(b.id==="zpclr"){zpSet("");const i=document.getElementById("zpw");if(i)i.value="";renderAll();toast("저장된 비밀번호를 지웠어요");return;}
+  if(b.id==="gsave"){S.set.gmailQ=$("#gmailq").value.trim();S.set.gcid=$("#gcid").value.trim();S.set.dfolder=$("#dfolder").value.trim()||"카드관리";delete S.set.dFolderId;save();toast("저장");return;}
   if(d.ov){S.ov[d.ov]=d.v;const pp=d.ov.split("|");S.ovm=S.ovm||{};S.ovm[pp[0]+"|"+pp[3]]=d.v;save();renderAll();toast(d.v+"로 지정");return;}
   if(d.pok){const k=d.pok+"|"+CUR();if(d.v==="")delete S.prevOk[k];else S.prevOk[k]=d.v==="1";save();renderAll();return;}
   if(d.used){const m=CUR();if(S.used[d.used]&&S.used[d.used].m===m)delete S.used[d.used];else S.used[d.used]={m};save();renderP3();return;}
@@ -1025,6 +1155,7 @@ document.addEventListener("click",async e=>{
   if(b.id==="brst"){if(!confirm("이달 [썼음] 체크와 수동입력을 지울까요?"))return;const m=CUR();for(const k in S.used)if(S.used[k].m===m)delete S.used[k];S.man=S.man.filter(t=>ym(t.d)!==m);save();renderAll();toast("이달 초기화");return;}
 });
 document.addEventListener("input",e=>{if(e.target.id==="mq")renderSug();});
+document.addEventListener("change",e=>{if(e.target.id==="zpns"){S.set.zpNoSave=e.target.checked;if(e.target.checked)zpSet("");save();renderAll();toast(e.target.checked?"비밀번호를 저장하지 않아요":"비밀번호를 이 폰에 저장해요");}});
 document.addEventListener("click",e=>{
   const pm=e.target.closest("[data-pm]");if(pm){const v=pm.dataset.pm;VIEWM=v===CUR()?null:v;OPENROW=null;renderP1();return;}
   if(e.target.closest("button,input,select,.mdet"))return;
@@ -1922,7 +2053,7 @@ function applyStartParam(){const p=(location.search.match(/[?&]p=(p[1-9])/)||[])
 
 /* ---- 드라이브 백업 (drive.file 권한: 앱이 만든 파일만 읽고 씀) ---- */
 const BK_NAME="카드관리_앱백업.json";
-var SCOPES="https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file";
+var SCOPES="https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.readonly";
 async function driveFolderId(tok){
   if(S.set.dFolderId)return S.set.dFolderId;
   const A="https://www.googleapis.com/drive/v3/files";
