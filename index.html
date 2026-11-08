@@ -221,7 +221,7 @@ nav button{font-size:13px}
 "use strict";
 /* ================= 데이터 (카드사 공식 페이지 2026-09-25 조사, 리버 확인) ================= */
 const DATA={
-ver:"261026-v3.3",
+ver:"261026-v3.4",
 cards:[
  {id:"sh",name:"신한 The BEST-F",short:"신한",color:"var(--c-sh)",pay:"The BEST-F 스카이패스",th:[300000],unlock:13900,
   unlockNote:"스벅 3,900 + 백화점·마트 5% 한도 1만",hal:"count",pay_day:15},
@@ -641,7 +641,7 @@ const TXK={ /* 거래 판별기: 뱅샐 소분류(sub)·가맹점(c) 기준 */
   ev:t=>/EV충전|\bEV\b|전기차|충전기|차지비|환경부충전|에버온|급속충전/.test(t.c),
   transit:t=>t.sub==="대중교통"||/지하철|티머니|캐시비|시내버스|마을버스|_버스/.test(t.c),
   taxi:t=>t.sub==="택시"||/택시|카카오T|우버|UT /i.test(t.c),
-  fuel:t=>!TXK.ev(t)&&(t.sub==="주유"||/주유소|LPG|엘피지|가스충전소|오일뱅크/i.test(t.c)),
+  fuel:t=>!TXK.ev(t)&&(t.sub==="주유"||/주유소|LPG|엘피지|가스충전소|오일뱅크|에너지/i.test(t.c)),
   loMart:t=>/롯데마트|VIC마켓|빅마켓/.test(t.c),
   speedmate:t=>/스피드메이트/.test(t.c),
   famW:t=>/롯데백화점|롯데아울렛|롯데몰|롯데프리미엄아울렛/.test(t.c),
